@@ -14,8 +14,13 @@ find_package(sensor_msgs REQUIRED)
                           
 include_directories(${PROJECT_SOURCE_DIR}/include)
 
-add_executable(battary_control_node 
-          ${PROJECT_SOURCE_DIR}/src/battary_control.cpp ${PROJECT_SOURCE_DIR}/src/time_count.c)
+file(GLOB_RECURSE SRC_FILE ${PROJECT_SOURCE_DIR}/src/time_count.c)
+add_library(src_lib ${SRC_FILE})
+
+add_executable(battary_control_node
+          ${PROJECT_SOURCE_DIR}/src/battary_control.cpp)
+
+target_link_libraries(battary_control_node src_lib)        
 
 ament_target_dependencies(
     battary_control_node

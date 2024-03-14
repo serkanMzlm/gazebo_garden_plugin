@@ -2,12 +2,10 @@
 
 
 BattaryControl::BattaryControl():Node("battary_node"){
+    reset();
     Load();
     current_time =  xTaskGetTickCount();
     last_time =  xTaskGetTickCount();
-}
-
-void BattaryControl::setTemperature(float temp){
 }
 
 void BattaryControl::reset(){
@@ -41,46 +39,44 @@ void BattaryControl::nanlinearDischargeVoltageUpdate(){
 }
 
 void BattaryControl::currentCallback(const twistMsg msg){
-
+    current_drawn_ = 0;
+    current_drawn_ = 10.0; //msg gelicek
 }
 
 void BattaryControl::update(){
     current_time =  xTaskGetTickCount();
     uint64_t dt = (current_time - last_time);
-    if(dt > update_period_){
+    if(dt > MS2S(update_period_)){
         double n = dt / temp_lpf_tau_;
         temperature_ = temperature_ + n * (temp_set_ - temperature_);
-        // if (!battery_empty_) {
-        //     // LPF filter on current
-        //     double k = dt / lpf_tau_;
-        //     current_lpf_ = current_lpf_ + k * (current_drawn_ - current_lpf_);
-        //     // Accumulate discharge (negative: 0 to design capacity)
-        //     discharge_ = discharge_ - GZ_SEC_TO_HOUR(dt * current_lpf_);
-        //     if (!internal_cutt_off_) {
-        //         if (use_nonlinear_model_){
-        //             nonlinear_discharge_voltage_update();
-        //         }
-        //         else {
-        //             linear_discharge_voltage_update();
-        //         }
-        //         charge_ = design_capacity_ + discharge_; // discharge is negative
-        //         charge_memory_ = charge_;
-        //     }
-        //     if (voltage_<=cut_off_voltage_ && !internal_cutt_off_) {
-        //         discharge_ = 0;
-        //         voltage_ = 0;
-        //         internal_cutt_off_ = true;
-        //         charge_ = charge_memory_;
-        //     }
-        // }
+        if (!battery_empty_) {
+            double k = dt / lpf_tau_;
+            current_lpf_ = current_lpf_ + k * (current_drawn_ - current_lpf_);
+            if (!internal_cutt_off_) {
+                if (use_nonlinear_model_){
+                    nanlinearDischargeVoltageUpdate();
+                }
+                else {
+                    linearDischargeVoltageUpdate();
+                }
+                charge_ = design_capacity_ + discharge_; // discharge is negative
+                charge_memory_ = charge_;
+            }
+            if (voltage_<=cut_off_voltage_ && !internal_cutt_off_) {
+                discharge_ = 0;
+                voltage_ = 0;
+                internal_cutt_off_ = true;
+                charge_ = charge_memory_;
+            }
+        }
 
-        // if (!battery_empty_ && charge_<=0) {
-        //     discharge_ = 0;
-        //     current_lpf_ = 0;
-        //     voltage_ = 0;
-        //     battery_empty_ = true;
-        // }
-        // last_time =  xTaskGetTickCount();
+        if (!battery_empty_ && charge_<=0) {
+            discharge_ = 0;
+            current_lpf_ = 0;
+            voltage_ = 0;
+            battery_empty_ = true;
+        }
+        last_time =  xTaskGetTickCount();
     }
 }
 
@@ -135,6 +131,7 @@ void BattaryControl::Load(){
    }else{
         this->update_period_ = 0.0;
    }
+   temp_set_ = design_temperature_;
 }
 
 int main(int argc, char* argv[]){

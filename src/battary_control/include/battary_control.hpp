@@ -5,7 +5,10 @@
 #include "geometry_msgs/msg/twist.hpp"
 
 #include "battary_control_type.hpp"
+
+extern "C" {
 #include "time_count.h"
+}
 
 using twistMsg = geometry_msgs::msg::Twist;
 
@@ -16,12 +19,12 @@ public:
     void Load();
     void reset();
     void update();
-    void setTemperature(float temp);
     void currentCallback(const twistMsg);
     void linearDischargeVoltageUpdate();
     void nanlinearDischargeVoltageUpdate();
     
 private:
+
     bool publish_voltage_;
     int technology_;
     int num_of_consumers_;
@@ -64,6 +67,8 @@ private:
 
     uint64_t current_time;
     uint64_t last_time;
+
+    rclcpp::TimeBase::SharedPtr charge_time;
 };
 
 
