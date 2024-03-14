@@ -22,6 +22,7 @@ public:
     BattaryControl();
     void setVoltage();
     void linearDischarge(float current);
+    void nanlinearDischarge(float current);
     void currentCallback();
 private:
     float temperature {25.0}; // [C]
