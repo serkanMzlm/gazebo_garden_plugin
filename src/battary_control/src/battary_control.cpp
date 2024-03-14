@@ -3,20 +3,26 @@
 
 BattaryControl::BattaryControl():Node("battary_node"){
     setVoltage();
-    voltage_pub = this->create_publisher<float32Msg>("voltage", 10);
+    info_pub = this->create_publisher<twistMsg>("info", 10);
+    sbus_sub    = this->create_subscription<twistMsg>("sbus", 10, 
+                                std::bind(&BattaryControl::sbusCallback, 
+                                             this, std::placeholders::_1));
+    arming_info_sub = this->create_subscription<int16Msg>("arming_info", 10, 
+                                    std::bind(&BattaryControl::armingCallback, 
+                                                this, std::placeholders::_1));
+
     timer_ = this->create_wall_timer(std::chrono::milliseconds(P2F(50)),
                                 std::bind(&BattaryControl::currentCallback, this));
 }
 
 void BattaryControl::setVoltage(){
-    this->max_voltage = cell_max_voltage * number_of_cell; 
-    this->min_voltage = cell_min_voltage * number_of_cell; 
+    this->max_voltage = cell_max_voltage * number_of_cells; 
+    this->min_voltage = cell_min_voltage * number_of_cells; 
     this->voltage = this->max_voltage - 0.5;  
 }
 
 void BattaryControl::linearDischarge(float current){
-    float32Msg msg;
-    float deltaTime = 1.0;
+    twistMsg msg;
 
     float voltage_drop = current * internal_resistance;
     float effective_current = current - voltage_drop;
@@ -30,34 +36,30 @@ void BattaryControl::linearDischarge(float current){
     }
 
     std::cout << "voltage : " << voltage  <<std::endl;
-    msg.data = voltage;
-    voltage_pub->publish(msg);
+    // msg.data = voltage;
+    info_pub->publish(msg);
 }
 
 void BattaryControl::nanlinearDischarge(float current){
-    float32Msg msg;
+    twistMsg msg;
     float deltaTime = 1;
 
     float voltage_drop = current * internal_resistance;
     float effective_current = current - voltage_drop;
 
-    // Voltajın düşük olma oranını hesapla
-    float voltage_ratio = (voltage - min_voltage) / (max_voltage - min_voltage);
+    float voltage_ratio = voltage / max_voltage ;
+    
+    float decay_factor = 1.0 - 1.0 / (1.0 + exp(-10 * (voltage_ratio)));
 
-    // Azalma faktörünü belirlemek için ters sigmoid fonksiyonu kullan
-    float decay_factor = 1.0 - 1.0 / (1.0 + exp(-20 * (voltage_ratio - 0.4)));
-    if(decay_factor < 0.0001){
-        decay_factor = 0.0001;
+    if(decay_factor < 0.0002){
+        decay_factor = 0.0002;
     } 
 
-    // Azalma faktörünü voltajın maksimum değerine göre ayarla
     float max_decay_factor = 1.0 - min_voltage / max_voltage;
     decay_factor *= max_decay_factor;
 
-    // Voltajı azalt
     voltage -= decay_factor * effective_current * internal_resistance;
 
-    // Minimum ve maksimum voltaj sınırlarına kontrol ekle
     if (voltage < 0.0) {
         voltage = 0.0;
     } else if (voltage > max_voltage) {
@@ -67,16 +69,40 @@ void BattaryControl::nanlinearDischarge(float current){
         std::cout << "decay_factor: " << decay_factor <<std::endl;
         std::cout << "voltage : " << voltage << std::endl;
     }
-    msg.data = voltage;
-    voltage_pub->publish(msg);
+    msg.linear.x = voltage;
+    msg.linear.y = current * number_of_motors;
+    info_pub->publish(msg);
 }
 
+void BattaryControl::nanlinearDischarge(float current, int id){
+
+}
+
+void BattaryControl::sbusCallback(const twistMsg::SharedPtr msg){
+    float roll  = msg->angular.x;
+    float pitch = msg->angular.y;
+    float yaw   = msg->angular.z;
+    float thrust = msg->linear.z;
+    float current = thrust2current(thrust);
+    if(is_arming == DISARM){
+        current = 1.0;
+    }
+    std::cout << "thrust: " << thrust << " current: " << current << std::endl;
+    nanlinearDischarge(current);
+}
+
+void BattaryControl::armingCallback(const int16Msg::SharedPtr msg){
+    is_arming =  msg->data;
+}
+
+float BattaryControl::thrust2current(float thurst){
+    return ((4.0  * pow(10, -5) * pow(thurst, 2)) - (0.09052 * thurst) +  52.0775);
+}
 
 void BattaryControl::currentCallback(){
     // linearDischarge(0.1);
-    nanlinearDischarge(40);
+    // nanlinearDischarge(40);
 }   
-
 
 int main(int argc, char* argv[]){
     rclcpp::init(argc, argv);

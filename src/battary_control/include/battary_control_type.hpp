@@ -5,6 +5,8 @@
 #define CEL2KEL(X) (X + 273)
 #define MS2S(X) (X * 1000) // millisecond to second
 #define P2F(X) (1000 / X)
+#define ARM 2000
+#define DISARM 1000
 
 #endif
 
