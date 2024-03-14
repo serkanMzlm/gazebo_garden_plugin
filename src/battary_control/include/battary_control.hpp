@@ -1,8 +1,12 @@
 #ifndef __BATTARY_CONTROL_HPP__
 #define __BATTARY_CONTROL_HPP__
 
+#include <iostream>
+#include  <chrono>
+
 #include "rclcpp/rclcpp.hpp"
 #include "geometry_msgs/msg/twist.hpp"
+#include "std_msgs/msg/float32.hpp"
 
 #include "battary_control_type.hpp"
 
@@ -11,64 +15,31 @@ extern "C" {
 }
 
 using twistMsg = geometry_msgs::msg::Twist;
+using float32Msg = std_msgs::msg::Float32;
 
-
-class BattaryControl: rclcpp::Node {
+class BattaryControl: public rclcpp::Node {
 public:
     BattaryControl();
-    void Load();
-    void reset();
-    void update();
-    void currentCallback(const twistMsg);
-    void linearDischargeVoltageUpdate();
-    void nanlinearDischargeVoltageUpdate();
-    
+    void setVoltage();
+    void linearDischarge(float current);
+    void currentCallback();
 private:
+    float temperature {25.0}; // [C]
+    float capacity {5.2}; // [Ah]
+    float nominal_voltage {3.6}; // [V]
+    float internal_resistance {0.10}; // [ohm] 
 
-    bool publish_voltage_;
-    int technology_;
-    int num_of_consumers_;
-    int cell_count_;
-    double update_rate_;
-    double update_period_;
-    double design_capacity_;
-    double current_drawn_;
-    double nominal_voltage_;
-    double constant_voltage_;
-    double cut_off_voltage_;
-    double internal_resistance_;
-    double lpf_tau_;
-    // linear model params
-    double lin_discharge_coeff_;
-    bool use_nonlinear_model_;
-    // nonlinear model params
-    double polarization_constant_; // polarization constant [V/Ah] or pol. resistance [Ohm]
-    double exponential_voltage_;   // exponential voltage [V]
-    double exponential_capacity_;  // exponential capacity [1/(Ah)]
-    double characteristic_time_;   // characteristic time [s] for charge-dependence
-    double design_temperature_;         // Design temperature where pol. const is unchanged and voltages are nominal.
-    double arrhenius_rate_polarization_; // Arrhenius rate of polarization constant [K]
-    double capacity_temp_coeff_;      // Temperature dependence of capacity [Ah/K]
-    double reversible_voltage_temp_;  // Linear temperature dependant voltage shift [V/K]
-    // internal variables
-    bool model_initialised_;
-    bool internal_cutt_off_;
-    bool battery_empty_;
-    double voltage_;
-    double charge_;
-    double charge_memory_;
-    double current_;
-    double discharge_;
-    double capacity_;
-    double temperature_;
-    double temp_set_;
-    double temp_lpf_tau_;
-    double current_lpf_;
 
-    uint64_t current_time;
-    uint64_t last_time;
+    float cell_max_voltage {4.2}; // [V]
+    float cell_min_voltage {2.5}; // [V]
+    int number_of_cell {4};
 
-    rclcpp::TimeBase::SharedPtr charge_time;
+    float voltage;
+    float max_voltage; // [V]
+    float min_voltage; // [V]
+
+    rclcpp::TimerBase::SharedPtr timer_;
+    rclcpp::Publisher<float32Msg>::SharedPtr voltage_pub;
 };
 
 
