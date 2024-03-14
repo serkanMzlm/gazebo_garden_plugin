@@ -1,8 +1,12 @@
 #ifndef __BATTARY_CONTROL_HPP__
 #define __BATTARY_CONTROL_HPP__
 
+#include <iostream>
+#include  <chrono>
+
 #include "rclcpp/rclcpp.hpp"
 #include "geometry_msgs/msg/twist.hpp"
+#include "std_msgs/msg/float32.hpp"
 
 #include "battary_control_type.hpp"
 
@@ -11,15 +15,15 @@ extern "C" {
 }
 
 using twistMsg = geometry_msgs::msg::Twist;
+using float32Msg = std_msgs::msg::Float32;
 
-
-class BattaryControl: rclcpp::Node {
+class BattaryControl: public rclcpp::Node {
 public:
     BattaryControl();
     void Load();
     void reset();
     void update();
-    void currentCallback(const twistMsg);
+    void currentCallback(/* const twistMsg */);
     void linearDischargeVoltageUpdate();
     void nanlinearDischargeVoltageUpdate();
     
@@ -68,7 +72,8 @@ private:
     uint64_t current_time;
     uint64_t last_time;
 
-    rclcpp::TimeBase::SharedPtr charge_time;
+    rclcpp::Publisher<float32Msg>::SharedPtr voltage_pub;
+    rclcpp::TimerBase::SharedPtr charge_time;
 };
 
 

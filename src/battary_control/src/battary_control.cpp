@@ -1,21 +1,25 @@
 #include "battary_control.hpp"
 
-
 BattaryControl::BattaryControl():Node("battary_node"){
     reset();
     Load();
     current_time =  xTaskGetTickCount();
     last_time =  xTaskGetTickCount();
+
+    voltage_pub = this->create_publisher<float32Msg>("voltage", 10);
+    charge_time = this->create_wall_timer(std::chrono::milliseconds(P2F(10)),
+                                    std::bind(&BattaryControl::currentCallback, this));
 }
 
 void BattaryControl::reset(){
     // last_update_time_ = parent->GetWorld()->SimTime();
 	charge_ = design_capacity_;
 	voltage_ = constant_voltage_;
-	temperature_ = design_temperature_;
-	temp_set_ = design_temperature_;
+	temperature_ = 25.0;
+	temp_set_ = 25.0;
 	discharge_ = 0;
 	current_drawn_ = 0;
+    current_lpf_ = 0.0;
 	battery_empty_ = false;
 	internal_cutt_off_ = false;
 	model_initialised_ = true;
@@ -25,9 +29,12 @@ void BattaryControl::linearDischargeVoltageUpdate(){
     voltage_ = constant_voltage_ + lin_discharge_coeff_ 
                 * (1 - discharge_ / design_capacity_) 
                 - internal_resistance_ * current_lpf_;
+
+    std::cout << "voltage_: " << voltage_  << std::endl;
 }
 
 void BattaryControl::nanlinearDischargeVoltageUpdate(){
+    float32Msg msg;
     double t = CEL2KEL(temperature_);
     double t0 = CEL2KEL(design_temperature_);
     double E0T = constant_voltage_ + reversible_voltage_temp_ * (t - t0);
@@ -36,24 +43,29 @@ void BattaryControl::nanlinearDischargeVoltageUpdate(){
     voltage_ = E0T - KT * QT/(QT + discharge_)
               * (current_lpf_ * (characteristic_time_ / 3600.0) - discharge_)
               + exponential_voltage_ * exp(-exponential_capacity_ * -discharge_);
+    std::cout << "t: " << t << " t0: " << t0 << " EOT: " << E0T << std::endl;
+
 }
 
-void BattaryControl::currentCallback(const twistMsg msg){
-    current_drawn_ = 0;
-    current_drawn_ = 10.0; //msg gelicek
+void BattaryControl::currentCallback(/* const twistMsg msg */){
+    current_drawn_ = 0.1; //msg gelicek
+    battery_empty_ = false;
+    update();
 }
 
 void BattaryControl::update(){
     current_time =  xTaskGetTickCount();
     uint64_t dt = (current_time - last_time);
+    // RCLCPP_INFO(this->get_logger(), "update period: %f | dt: %ld", MS2S(update_period_), dt);
+
     if(dt > MS2S(update_period_)){
         double n = dt / temp_lpf_tau_;
+        // RCLCPP_INFO(this->get_logger(), "dt: %d", battery_empty_);
         temperature_ = temperature_ + n * (temp_set_ - temperature_);
         if (!battery_empty_) {
-            double k = dt / lpf_tau_;
-            current_lpf_ = current_lpf_ + k * (current_drawn_ - current_lpf_);
+            double k = 2;//dt / lpf_tau_;
             if (!internal_cutt_off_) {
-                if (use_nonlinear_model_){
+                if (!use_nonlinear_model_){
                     nanlinearDischargeVoltageUpdate();
                 }
                 else {
@@ -63,10 +75,11 @@ void BattaryControl::update(){
                 charge_memory_ = charge_;
             }
             if (voltage_<=cut_off_voltage_ && !internal_cutt_off_) {
-                discharge_ = 0;
-                voltage_ = 0;
-                internal_cutt_off_ = true;
-                charge_ = charge_memory_;
+                // discharge_ = 0;
+                voltage_ = 100;
+                // internal_cutt_off_ = true;
+                // charge_ = charge_memory_;
+                // reset();
             }
         }
 
@@ -89,10 +102,9 @@ void BattaryControl::Load(){
     this->declare_parameter<double> ("nominal_voltage", 24.0);
     this->declare_parameter<double> ("cut_off_voltage", 18.0);
     this->declare_parameter<double> ("full_charge_voltage", 24.2);
-    this->declare_parameter<double> ("current_filter_tau", 1.0);
-    this->declare_parameter<double> ("temperature_response_tau", 0.5);
+    this->declare_parameter<double> ("current_filter_tau", 10.0);
+    this->declare_parameter<double> ("temperature_response_tau", 1);
     this->declare_parameter<double> ("internal_resistance", 0.05);
-    this->declare_parameter<double> ("design_temperature", 25);
 
     this->declare_parameter<double> ("polarization_constant", 0.07);
     this->declare_parameter<double> ("exponential_voltage", 0.7);
@@ -115,7 +127,6 @@ void BattaryControl::Load(){
     constant_voltage_ = this->get_parameter("full_charge_voltage").as_double();
     temp_lpf_tau_     = this->get_parameter("temperature_response_tau").as_double();
     internal_resistance_ = this->get_parameter("internal_resistance").as_double();
-    design_temperature_  = this->get_parameter("design_temperature").as_double();
 
    polarization_constant_ = this->get_parameter("polarization_constant").as_double();
    exponential_voltage_ = this->get_parameter("exponential_voltage").as_double();
@@ -132,9 +143,12 @@ void BattaryControl::Load(){
         this->update_period_ = 0.0;
    }
    temp_set_ = design_temperature_;
+   use_nonlinear_model_ = true;
 }
 
 int main(int argc, char* argv[]){
     rclcpp::init(argc, argv);
+    rclcpp::spin(std::make_shared<BattaryControl>());
+    rclcpp::shutdown();
     return 0;
 }
