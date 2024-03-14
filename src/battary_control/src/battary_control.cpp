@@ -45,11 +45,10 @@ void BattaryControl::nanlinearDischarge(float current){
     float voltage_ratio = (voltage - min_voltage) / (max_voltage - min_voltage);
 
     // Azalma faktörünü belirlemek için ters sigmoid fonksiyonu kullan
-    float decay_factor = 1.0 - 1.0 / (1.0 + exp(-22 * (voltage_ratio - 0.4)));
-    std::cout << "decay_factor: " << decay_factor <<std::endl;
-    if(decay_factor < 0.0){
-        decay_factor = 0.05;
-    }
+    float decay_factor = 1.0 - 1.0 / (1.0 + exp(-20 * (voltage_ratio - 0.4)));
+    if(decay_factor < 0.0001){
+        decay_factor = 0.0001;
+    } 
 
     // Azalma faktörünü voltajın maksimum değerine göre ayarla
     float max_decay_factor = 1.0 - min_voltage / max_voltage;
@@ -64,8 +63,10 @@ void BattaryControl::nanlinearDischarge(float current){
     } else if (voltage > max_voltage) {
         voltage = max_voltage;
     }
-
-    std::cout << "voltage : " << voltage << std::endl;
+    if(voltage > 0.1){
+        std::cout << "decay_factor: " << decay_factor <<std::endl;
+        std::cout << "voltage : " << voltage << std::endl;
+    }
     msg.data = voltage;
     voltage_pub->publish(msg);
 }
